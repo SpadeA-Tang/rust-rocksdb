@@ -772,6 +772,20 @@ impl DB {
         Ok(())
     }
 
+    pub fn freeze_and_clone(&self, opts: DBOptions, dirs: &[&str]) -> Result<Vec<DB>, String> {
+        let c_files = build_cstring_list(files);
+        let c_files_ptrs: Vec<*const _> = c_files.iter().map(|s| s.as_ptr()).collect();
+        unsafe {
+            let dbs = ffi_try!(crocksdb_freeze_and_clone(
+                opts.inner,
+                self.inner,
+                c_files_ptrs.as_ptr(),
+                c_files_ptrs.len()
+            ));
+        }
+        Ok(())
+    }
+
     pub fn destroy(opts: &DBOptions, path: &str) -> Result<(), String> {
         let cpath = CString::new(path.as_bytes()).unwrap();
         unsafe {

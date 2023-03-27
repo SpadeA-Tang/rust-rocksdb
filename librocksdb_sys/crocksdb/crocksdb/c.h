@@ -269,6 +269,10 @@ extern C_ROCKSDB_LIBRARY_API void crocksdb_merge_disjoint_instances(
     unsigned char allow_source_write, int max_preload_files,
     crocksdb_t** instances, size_t num_instances, char** errptr);
 
+extern C_ROCKSDB_LIBRARY_API crocksdb_t** crocksdb_freeze_and_clone(
+    const crocksdb_options_t* options, crocksdb_t* db, const char** dirs,
+    int db_num, char** errptr);
+
 extern C_ROCKSDB_LIBRARY_API void crocksdb_status_ptr_get_error(
     crocksdb_status_ptr_t*, char** errptr);
 

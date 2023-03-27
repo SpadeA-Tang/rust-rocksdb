@@ -1055,6 +1055,13 @@ extern "C" {
         num_instances: size_t,
         err: *mut *mut c_char,
     ) -> *mut DBInstance;
+    pub fn crocksdb_freeze_and_clone(
+        options: *const Options,
+        db: *mut DBInstance,
+        dirs: *const *const c_char,
+        db_num: size_t,
+        err: *mut *mut c_char,
+    ) -> *mut *mut DBInstance;
     pub fn crocksdb_writeoptions_create() -> *mut DBWriteOptions;
     pub fn crocksdb_writeoptions_destroy(writeopts: *mut DBWriteOptions);
     pub fn crocksdb_writeoptions_set_sync(writeopts: *mut DBWriteOptions, v: bool);
