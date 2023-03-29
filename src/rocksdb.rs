@@ -772,13 +772,17 @@ impl DB {
         Ok(())
     }
 
-    pub fn freeze_and_clone(&self, opts: DBOptions, dirs: &[&str]) -> Result<Vec<DB>, String> {
+    pub fn freeze_and_clone(&self, opts: Vec<DBOptions>, dirs: &[&str]) -> Result<Vec<DB>, String> {
         let c_files = build_cstring_list(dirs);
         let c_files_ptrs: Vec<*const _> = c_files.iter().map(|s| s.as_ptr()).collect();
 
         let cstrings = build_cstring_list(&self.cf_names());
         let cf_names: Vec<*const _> = cstrings.iter().map(|cs| cs.as_ptr()).collect();
         let mut cf_handles: Vec<_> = vec![vec![ptr::null_mut(); cf_names.len()]; dirs.len()];
+        let db_opts = opts
+            .iter()
+            .map(|opt| opt.inner as *const _)
+            .collect::<Vec<_>>();
         let cf_handles = cf_handles
             .iter_mut()
             .map(|h| h.as_mut_ptr())
@@ -793,8 +797,9 @@ impl DB {
             let db_cf_ptrs = cf_names.as_ptr();
             let db_cf_opts = cf_opts.as_ptr();
             let db_cf_handles = cf_handles.as_ptr();
+            let db_opts_ptr = db_opts.as_ptr();
             let dbs = ffi_try!(crocksdb_freeze_and_clone(
-                opts.inner,
+                db_opts_ptr,
                 db_cfs_count,
                 db_cf_ptrs,
                 db_cf_opts,
@@ -817,11 +822,9 @@ impl DB {
             let mut cfs = Vec::with_capacity(cf_names.len());
             let mut cfs_by_name = BTreeMap::new();
             let cf_handles = unsafe { Vec::from_raw_parts(cf_handles[i], dirs.len(), dirs.len()) };
-            for j in 0..self.cfs.len() {
+            for (j, cf_handle) in cf_handles.iter().enumerate().take(self.cfs.len()) {
                 let name = self.cfs[j].as_ref().unwrap().0.clone();
-                let handle = CFHandle {
-                    inner: cf_handles[j],
-                };
+                let handle = CFHandle { inner: *cf_handle };
                 let idx = handle.id() as usize;
                 while cfs.len() <= idx {
                     cfs.push(None);
@@ -3995,7 +3998,9 @@ mod test {
 
         let dirs = vec![root_path.join("2"), root_path.join("3")];
         let target_dirs = dirs.iter().map(|p| p.to_str().unwrap()).collect::<Vec<_>>();
-        let dbs = db.freeze_and_clone(opts, &target_dirs).unwrap();
+        let dbs = db
+            .freeze_and_clone(vec![opts.clone(), opts.clone()], &target_dirs)
+            .unwrap();
 
         for db in &dbs {
             assert_eq!(db.get(b"1").unwrap().unwrap(), b"v1");

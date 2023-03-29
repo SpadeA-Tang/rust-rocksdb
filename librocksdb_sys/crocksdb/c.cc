@@ -811,7 +811,7 @@ void crocksdb_merge_disjoint_instances(crocksdb_t* db,
 }
 
 crocksdb_t** crocksdb_freeze_and_clone(
-    const crocksdb_options_t* options, int num_column_families,
+    const crocksdb_options_t** options, int num_column_families,
     char** column_family_names,
     const crocksdb_options_t** column_family_options,
     crocksdb_column_family_handle_t*** column_family_handles, crocksdb_t* db,
@@ -826,15 +826,17 @@ crocksdb_t** crocksdb_freeze_and_clone(
   std::vector<std::vector<ColumnFamilyHandle*>> handles;
 
   std::vector<std::string> instance_dirs;
-  crocksdb_t** dbs =
-      static_cast<crocksdb_t**>(malloc(sizeof(crocksdb_t*) * db_num));
+  std::vector<DBOptions> db_options;
   std::vector<DB*> tmp;
   for (int i = 0; i < db_num; i++) {
     instance_dirs.push_back(std::string(dirs[i]));
+    db_options.push_back(DBOptions(options[i]->rep));
   }
-  SaveError(errptr, db->rep->FreezeAndClone(DBOptions(options->rep),
-                                            instance_dirs, column_families,
-                                            &handles, &tmp));
+  SaveError(errptr, db->rep->FreezeAndClone(db_options, instance_dirs,
+                                            column_families, &handles, &tmp));
+
+  crocksdb_t** dbs =
+      static_cast<crocksdb_t**>(malloc(sizeof(crocksdb_t*) * db_num));
   for (size_t i = 0; i < db_num; i++) {
     dbs[i] = new crocksdb_t;
     dbs[i]->rep = tmp[i];
