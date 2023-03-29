@@ -776,27 +776,23 @@ impl DB {
         let c_files = build_cstring_list(dirs);
         let c_files_ptrs: Vec<*const _> = c_files.iter().map(|s| s.as_ptr()).collect();
 
-        let cf_names = self.cf_names();
-        let cstrings = build_cstring_list(&cf_names);
+        let cstrings = build_cstring_list(&self.cf_names());
+        let cf_names: Vec<*const _> = cstrings.iter().map(|cs| cs.as_ptr()).collect();
         let mut cf_handles: Vec<_> = vec![vec![ptr::null_mut(); cf_names.len()]; dirs.len()];
+        let cf_handles = cf_handles
+            .iter_mut()
+            .map(|h| h.as_mut_ptr())
+            .collect::<Vec<_>>();
+        let cf_opts = self
+            ._cf_opts
+            .iter()
+            .map(|x| x.inner as *const crocksdb_ffi::Options)
+            .collect::<Vec<_>>();
         let dbs = unsafe {
             let db_cfs_count = cf_names.len() as c_int;
-            let db_cf_ptrs = cstrings
-                .iter()
-                .map(|cs| cs.as_ptr())
-                .collect::<Vec<_>>()
-                .as_ptr();
-            let db_cf_opts = self
-                ._cf_opts
-                .iter()
-                .map(|x| x.inner as *const crocksdb_ffi::Options)
-                .collect::<Vec<_>>()
-                .as_ptr();
-            let db_cf_handles = cf_handles
-                .iter_mut()
-                .map(|h| h.as_mut_ptr())
-                .collect::<Vec<_>>()
-                .as_ptr();
+            let db_cf_ptrs = cf_names.as_ptr();
+            let db_cf_opts = cf_opts.as_ptr();
+            let db_cf_handles = cf_handles.as_ptr();
             let dbs = ffi_try!(crocksdb_freeze_and_clone(
                 opts.inner,
                 db_cfs_count,
@@ -820,10 +816,11 @@ impl DB {
 
             let mut cfs = Vec::with_capacity(cf_names.len());
             let mut cfs_by_name = BTreeMap::new();
+            let cf_handles = unsafe { Vec::from_raw_parts(cf_handles[i], dirs.len(), dirs.len()) };
             for j in 0..self.cfs.len() {
                 let name = self.cfs[j].as_ref().unwrap().0.clone();
                 let handle = CFHandle {
-                    inner: cf_handles[i][j],
+                    inner: cf_handles[j],
                 };
                 let idx = handle.id() as usize;
                 while cfs.len() <= idx {
@@ -3970,5 +3967,48 @@ mod test {
         db3.merge_instances(&mopts, &[&db1, &db2]).unwrap();
         assert_eq!(db3.get(b"1").unwrap().unwrap(), b"v");
         assert_eq!(db3.get(b"2").unwrap().unwrap(), b"v");
+    }
+
+    #[test]
+    fn test_freeze_and_clone() {
+        let path_dir = tempdir_with_prefix("_test_merge_instance");
+        let root_path = path_dir.path();
+        let cfs = ["default", "cf1"];
+        let cfs_opts = vec![ColumnFamilyOptions::new(); 2];
+        let mut opts = DBOptions::new();
+        opts.set_write_buffer_manager(&crate::WriteBufferManager::new(0, 0.0, true));
+        opts.create_if_missing(true);
+        opts.create_missing_column_families(true);
+        let mut wopts = WriteOptions::new();
+        wopts.disable_wal(true);
+        let db = DB::open_cf(
+            opts.clone(),
+            root_path.join("1").to_str().unwrap(),
+            cfs.iter().map(|cf| *cf).zip(cfs_opts.clone()).collect(),
+        )
+        .unwrap();
+        db.put_opt(b"1", b"v1", &wopts).unwrap();
+        db.put_opt(b"2", b"v2", &wopts).unwrap();
+        db.flush(true).unwrap();
+        db.put_opt(b"3", b"v3", &wopts).unwrap();
+        db.put_opt(b"4", b"v4", &wopts).unwrap();
+
+        let dirs = vec![root_path.join("2"), root_path.join("3")];
+        let target_dirs = dirs.iter().map(|p| p.to_str().unwrap()).collect::<Vec<_>>();
+        let dbs = db.freeze_and_clone(opts, &target_dirs).unwrap();
+
+        for db in &dbs {
+            assert_eq!(db.get(b"1").unwrap().unwrap(), b"v1");
+            assert_eq!(db.get(b"2").unwrap().unwrap(), b"v2");
+            assert_eq!(db.get(b"3").unwrap().unwrap(), b"v3");
+            assert_eq!(db.get(b"4").unwrap().unwrap(), b"v4");
+        }
+
+        dbs[0].put_opt(b"5", b"v51", &wopts).unwrap();
+        dbs[1].put_opt(b"5", b"v52", &wopts).unwrap();
+
+        assert_eq!(dbs[0].get(b"5").unwrap().unwrap(), b"v51");
+        assert_eq!(dbs[1].get(b"5").unwrap().unwrap(), b"v52");
+        assert!(db.get(b"5").unwrap().is_none());
     }
 }
