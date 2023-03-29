@@ -823,7 +823,7 @@ crocksdb_t** crocksdb_freeze_and_clone(
         ColumnFamilyOptions(column_family_options[i]->rep)));
   }
 
-  std::vector<std::vector<ColumnFamilyHandle*>> handles;
+  std::vector<std::vector<ColumnFamilyHandle*>*> handles;
 
   std::vector<std::string> instance_dirs;
   crocksdb_t** dbs =
@@ -838,6 +838,7 @@ crocksdb_t** crocksdb_freeze_and_clone(
   for (size_t i = 0; i < db_num; i++) {
     dbs[i] = new crocksdb_t;
     dbs[i]->ref = tmp[i];
+    column_family_handles[i] = handles[i];
   }
   return dbs;
 }
