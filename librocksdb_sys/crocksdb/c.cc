@@ -823,22 +823,27 @@ crocksdb_t** crocksdb_freeze_and_clone(
         ColumnFamilyOptions(column_family_options[i]->rep)));
   }
 
-  std::vector<std::vector<ColumnFamilyHandle*>*> handles;
+  std::vector<std::vector<ColumnFamilyHandle*>> handles;
 
   std::vector<std::string> instance_dirs;
   crocksdb_t** dbs =
       static_cast<crocksdb_t**>(malloc(sizeof(crocksdb_t*) * db_num));
   std::vector<DB*> tmp;
-  for (int i = 0; i < dir_num; i++) {
-    instance_dir.push_back(std::string(dirs[i]));
+  for (int i = 0; i < db_num; i++) {
+    instance_dirs.push_back(std::string(dirs[i]));
   }
-  SaveError(errptr,
-            db->rep->FreezeAndClone(DBOptions(db_options->rep), column_families,
-                                    &handles, instance_dirs, &tmp));
+  SaveError(errptr, db->rep->FreezeAndClone(DBOptions(options->rep),
+                                            instance_dirs, column_families,
+                                            &handles, &tmp));
   for (size_t i = 0; i < db_num; i++) {
     dbs[i] = new crocksdb_t;
-    dbs[i]->ref = tmp[i];
-    column_family_handles[i] = handles[i];
+    dbs[i]->rep = tmp[i];
+    column_family_handles[i] = static_cast<crocksdb_column_family_handle_t**>(
+        malloc(sizeof(crocksdb_column_family_handle_t*) * num_column_families));
+    for (size_t j = 0; j < num_column_families; j++) {
+      column_family_handles[i][j] = new crocksdb_column_family_handle_t;
+      column_family_handles[i][j]->rep = handles[i][j];
+    }
   }
   return dbs;
 }

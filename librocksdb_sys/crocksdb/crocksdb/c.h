@@ -270,8 +270,11 @@ extern C_ROCKSDB_LIBRARY_API void crocksdb_merge_disjoint_instances(
     crocksdb_t** instances, size_t num_instances, char** errptr);
 
 extern C_ROCKSDB_LIBRARY_API crocksdb_t** crocksdb_freeze_and_clone(
-    const crocksdb_options_t* options, crocksdb_t* db, const char** dirs,
-    int db_num, char** errptr);
+    const crocksdb_options_t* options, int num_column_families,
+    char** column_family_names,
+    const crocksdb_options_t** column_family_options,
+    crocksdb_column_family_handle_t*** column_family_handles, crocksdb_t* db,
+    const char** dirs, int db_num, char** errptr);
 
 extern C_ROCKSDB_LIBRARY_API void crocksdb_status_ptr_get_error(
     crocksdb_status_ptr_t*, char** errptr);

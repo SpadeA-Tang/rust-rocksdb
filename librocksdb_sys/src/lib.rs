@@ -1057,6 +1057,10 @@ extern "C" {
     ) -> *mut DBInstance;
     pub fn crocksdb_freeze_and_clone(
         options: *const Options,
+        num_column_families: c_int,
+        column_family_names: *const *const c_char,
+        column_family_options: *const *const Options,
+        column_family_handles: *const *mut *mut DBCFHandle,
         db: *mut DBInstance,
         dirs: *const *const c_char,
         db_num: size_t,

@@ -773,17 +773,77 @@ impl DB {
     }
 
     pub fn freeze_and_clone(&self, opts: DBOptions, dirs: &[&str]) -> Result<Vec<DB>, String> {
-        let c_files = build_cstring_list(files);
+        let c_files = build_cstring_list(dirs);
         let c_files_ptrs: Vec<*const _> = c_files.iter().map(|s| s.as_ptr()).collect();
-        unsafe {
+
+        let cf_names = self.cf_names();
+        let cstrings = build_cstring_list(&cf_names);
+        let mut cf_handles: Vec<_> = vec![vec![ptr::null_mut(); cf_names.len()]; dirs.len()];
+        let dbs = unsafe {
+            let db_cfs_count = cf_names.len() as c_int;
+            let db_cf_ptrs = cstrings
+                .iter()
+                .map(|cs| cs.as_ptr())
+                .collect::<Vec<_>>()
+                .as_ptr();
+            let db_cf_opts = self
+                ._cf_opts
+                .iter()
+                .map(|x| x.inner as *const crocksdb_ffi::Options)
+                .collect::<Vec<_>>()
+                .as_ptr();
+            let db_cf_handles = cf_handles
+                .iter_mut()
+                .map(|h| h.as_mut_ptr())
+                .collect::<Vec<_>>()
+                .as_ptr();
             let dbs = ffi_try!(crocksdb_freeze_and_clone(
                 opts.inner,
+                db_cfs_count,
+                db_cf_ptrs,
+                db_cf_opts,
+                db_cf_handles,
                 self.inner,
                 c_files_ptrs.as_ptr(),
                 c_files_ptrs.len()
             ));
+            Vec::from_raw_parts(dbs, dirs.len(), dirs.len() + 1)
+        };
+
+        let mut dbs_ret = vec![];
+        for i in 0..dirs.len() {
+            let mut opts = DBOptions::default();
+            unsafe {
+                crocksdb_ffi::crocksdb_options_destroy(opts.inner);
+                opts.inner = crocksdb_ffi::crocksdb_get_db_options(dbs[i]);
+            }
+
+            let mut cfs = Vec::with_capacity(cf_names.len());
+            let mut cfs_by_name = BTreeMap::new();
+            for j in 0..self.cfs.len() {
+                let name = self.cfs[j].as_ref().unwrap().0.clone();
+                let handle = CFHandle {
+                    inner: cf_handles[i][j],
+                };
+                let idx = handle.id() as usize;
+                while cfs.len() <= idx {
+                    cfs.push(None);
+                }
+                cfs[idx] = Some((name.to_owned(), handle));
+                cfs_by_name.insert(name.to_owned(), idx);
+            }
+
+            dbs_ret.push(DB {
+                cfs,
+                opts,
+                readonly: self.readonly, //todo
+                cfs_by_name,
+                inner: dbs[i],
+                path: dirs[i].to_owned(),
+                _cf_opts: self._cf_opts.clone(),
+            });
         }
-        Ok(())
+        Ok(dbs_ret)
     }
 
     pub fn destroy(opts: &DBOptions, path: &str) -> Result<(), String> {
