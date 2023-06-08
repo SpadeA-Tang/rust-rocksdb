@@ -3973,6 +3973,42 @@ mod test {
     }
 
     #[test]
+    fn test_rename() {
+        let path_dir = tempdir_with_prefix("_test_rename");
+        let root_path = path_dir.path();
+        let cfs = ["default", "cf1"];
+        let cfs_opts = vec![ColumnFamilyOptions::new(); 2];
+        let mut opts = DBOptions::new();
+        opts.set_write_buffer_manager(&crate::WriteBufferManager::new(0, 0.0, true));
+        opts.create_if_missing(true);
+        opts.create_missing_column_families(true);
+        let mut wopts = WriteOptions::new();
+        wopts.disable_wal(true);
+        let db = DB::open_cf(
+            opts.clone(),
+            root_path.join("1").to_str().unwrap(),
+            cfs.iter().map(|cf| *cf).zip(cfs_opts.clone()).collect(),
+        )
+        .unwrap();
+
+        db.put_opt(b"1", b"v1", &wopts).unwrap();
+        println!("{:?}", db.path());
+
+        std::fs::rename(
+            root_path.join("1").to_str().unwrap(),
+            root_path.join("2").to_str().unwrap(),
+        )
+        .unwrap();
+
+        db.put_opt(b"2", b"v2", &wopts).unwrap();
+        db.flush(true).unwrap();
+        assert_eq!(db.get(b"1").unwrap().unwrap(), b"v1");
+        assert_eq!(db.get(b"2").unwrap().unwrap(), b"v2");
+
+        println!("{:?}", db.path());
+    }
+
+    #[test]
     fn test_freeze_and_clone() {
         let path_dir = tempdir_with_prefix("_test_merge_instance");
         let root_path = path_dir.path();
