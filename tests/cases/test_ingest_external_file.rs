@@ -506,6 +506,66 @@ fn test_ingest_external_file_optimized() {
     assert_eq!(db.get_cf(handle, b"k1").unwrap().unwrap(), b"a");
     assert_eq!(db.get_cf(handle, b"k2").unwrap().unwrap(), b"b");
     assert_eq!(db.get_cf(handle, b"k3").unwrap().unwrap(), b"c");
+
+    let cf = db.cf_handle("default").unwrap();
+    let cf_meta = db.get_column_family_meta_data(&cf);
+    for level in cf_meta.get_levels() {
+        println!("====");
+        let mut print = false;
+        for file in level.get_files() {
+            print!("{:?} ", file.get_name());
+            print = true;
+        }
+        if print {
+            println!();
+        }
+        println!("====");
+    }
+}
+
+#[test]
+fn test_ingest_external_file_optimized2() {
+    let path = tempdir_with_prefix("_rust_rocksdb_ingest_sst_optimized");
+    let db = create_default_database(&path);
+    let gen_path = tempdir_with_prefix("_rust_rocksdb_ingest_sst_gen_new_cf");
+    let test_sstfile = gen_path.path().join("test_sst_file_optimized");
+    let test_sstfile_str = test_sstfile.to_str().unwrap();
+    let handle = db.cf_handle("default").unwrap();
+
+    let ingest_opt = IngestExternalFileOptions::new();
+    gen_sst_put(ColumnFamilyOptions::new(), None, test_sstfile_str);
+
+    let _ = db
+        .ingest_external_file_optimized(handle, &ingest_opt, &[test_sstfile_str])
+        .unwrap();
+    assert!(test_sstfile.exists());
+    assert_eq!(db.get_cf(handle, b"k1").unwrap().unwrap(), b"a");
+    assert_eq!(db.get_cf(handle, b"k2").unwrap().unwrap(), b"b");
+    assert_eq!(db.get_cf(handle, b"k3").unwrap().unwrap(), b"c");
+
+    // Overlap with the last ingestion.
+    let _ = db
+        .ingest_external_file_optimized(handle, &ingest_opt, &[test_sstfile_str])
+        .unwrap();
+    assert!(test_sstfile.exists());
+    assert_eq!(db.get_cf(handle, b"k1").unwrap().unwrap(), b"a");
+    assert_eq!(db.get_cf(handle, b"k2").unwrap().unwrap(), b"b");
+    assert_eq!(db.get_cf(handle, b"k3").unwrap().unwrap(), b"c");
+
+    let cf = db.cf_handle("default").unwrap();
+    let cf_meta = db.get_column_family_meta_data(&cf);
+    for (i, level) in cf_meta.get_levels().iter().enumerate() {
+        println!("==== level {}", i);
+        let mut print = false;
+        for file in level.get_files() {
+            print!("{:?} ", file.get_name());
+            print = true;
+        }
+        if print {
+            println!();
+        }
+        println!("====");
+    }
 }
 
 #[test]
