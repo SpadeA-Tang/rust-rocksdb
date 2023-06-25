@@ -55,6 +55,21 @@ fn gen_sst_put(opt: ColumnFamilyOptions, cf: Option<&CFHandle>, path: &str) {
     writer.finish().unwrap();
 }
 
+fn gen_sst_put2(opt: ColumnFamilyOptions, cf: Option<&CFHandle>, path: &str) {
+    let _ = fs::remove_file(path);
+    let env_opt = EnvOptions::new();
+    let mut writer = if cf.is_some() {
+        SstFileWriter::new_cf(env_opt, opt, cf.unwrap())
+    } else {
+        SstFileWriter::new(env_opt, opt)
+    };
+    writer.open(path).unwrap();
+    writer.put(b"k4", b"a").unwrap();
+    writer.put(b"k5", b"b").unwrap();
+    writer.put(b"k6", b"c").unwrap();
+    writer.finish().unwrap();
+}
+
 fn gen_sst_merge(opt: ColumnFamilyOptions, cf: Option<&CFHandle>, path: &str) {
     let _ = fs::remove_file(path);
     let env_opt = EnvOptions::new();
@@ -539,10 +554,15 @@ fn test_ingest_external_file_optimized2() {
     let gen_path = tempdir_with_prefix("_rust_rocksdb_ingest_sst_gen_new_cf");
     let test_sstfile = gen_path.path().join("test_sst_file_optimized");
     let test_sstfile_str = test_sstfile.to_str().unwrap();
+
+    let test_sstfile2 = gen_path.path().join("test_sst_file_optimized2");
+    let test_sstfile_str2 = test_sstfile2.to_str().unwrap();
+
     let handle = db.cf_handle("default").unwrap();
 
     let ingest_opt = IngestExternalFileOptions::new();
     gen_sst_put(ColumnFamilyOptions::new(), None, test_sstfile_str);
+    gen_sst_put2(ColumnFamilyOptions::new(), None, test_sstfile_str2);
 
     let _ = db
         .ingest_external_file_optimized(handle, &ingest_opt, &[test_sstfile_str])
@@ -553,6 +573,23 @@ fn test_ingest_external_file_optimized2() {
     assert_eq!(db.get_cf(handle, b"k3").unwrap().unwrap(), b"c");
 
     // Overlap with the last ingestion.
+    let _ = db
+        .ingest_external_file_optimized(handle, &ingest_opt, &[test_sstfile_str])
+        .unwrap();
+    assert!(test_sstfile.exists());
+    assert_eq!(db.get_cf(handle, b"k1").unwrap().unwrap(), b"a");
+    assert_eq!(db.get_cf(handle, b"k2").unwrap().unwrap(), b"b");
+    assert_eq!(db.get_cf(handle, b"k3").unwrap().unwrap(), b"c");
+
+    // Overlap with the last ingestion.
+    let _ = db
+        .ingest_external_file_optimized(handle, &ingest_opt, &[test_sstfile_str2])
+        .unwrap();
+    assert!(test_sstfile2.exists());
+    assert_eq!(db.get_cf(handle, b"k4").unwrap().unwrap(), b"a");
+    assert_eq!(db.get_cf(handle, b"k5").unwrap().unwrap(), b"b");
+    assert_eq!(db.get_cf(handle, b"k6").unwrap().unwrap(), b"c");
+
     let _ = db
         .ingest_external_file_optimized(handle, &ingest_opt, &[test_sstfile_str])
         .unwrap();
