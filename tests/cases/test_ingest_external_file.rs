@@ -305,6 +305,15 @@ fn create_default_database(path: &tempfile::TempDir) -> DB {
     DB::open(opts, path_str).unwrap()
 }
 
+fn create_default_database_with_dynamic_level_base(path: &tempfile::TempDir) -> DB {
+    let path_str = path.path().to_str().unwrap();
+    let mut opts = DBOptions::new();
+    opts.create_if_missing(true);
+    let mut opt = ColumnFamilyOptions::default();
+    opt.set_level_compaction_dynamic_level_bytes(true);
+    DB::open_cf(opts, path_str, vec![("default", opt)]).unwrap()
+}
+
 fn create_cfs(db: &mut DB, cfs: &[&str]) {
     for cf in cfs {
         if *cf != "default" {
@@ -526,7 +535,7 @@ fn test_ingest_external_file_optimized() {
 #[test]
 fn test_ingest_external_file_optimized2() {
     let path = tempdir_with_prefix("_rust_rocksdb_ingest_sst_optimized");
-    let db = create_default_database(&path);
+    let db = create_default_database_with_dynamic_level_base(&path);
     let gen_path = tempdir_with_prefix("_rust_rocksdb_ingest_sst_gen_new_cf");
     let test_sstfile = gen_path.path().join("test_sst_file_optimized");
     let test_sstfile_str = test_sstfile.to_str().unwrap();
