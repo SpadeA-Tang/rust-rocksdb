@@ -3018,7 +3018,7 @@ pub fn run_sst_dump_tool(sst_dump_args: &[String], opts: &DBOptions) {
 #[cfg(test)]
 mod test {
     use librocksdb_sys::DBValueType;
-    use std::fs;
+    use std::{fs, time::Instant};
     use std::path::Path;
     use std::str;
     use std::string::String;
@@ -3435,6 +3435,87 @@ mod test {
                 _ => assert!(false),
             }
         }
+    }
+
+    #[test]
+    fn test_x() {
+        let mut opts = DBOptions::new();
+        opts.create_if_missing(true);
+        let path = tempdir_with_prefix("xxxx");
+        let mut db = DB::open(opts, path.path().to_str().unwrap()).unwrap();
+        let handle = db.cf_handle("default").unwrap();
+
+        let mut cf_opts = ColumnFamilyOptions::new();
+        cf_opts.set_write_buffer_size(100000000000);
+        cf_opts.set_block_cache_size_mb(10240);
+        db.create_cf(("write", cf_opts)).unwrap();
+        let handle = db.cf_handle("write").unwrap();
+
+        let mut f = FlushOptions::default();
+        f.set_wait(true);
+        
+        let mut size = 0;
+        for i in 0..1000000 {
+            let k = "k".repeat(3000);
+            let v = "v".repeat(3000);
+            let key = format!("{}-{:010}", k, i);
+            db.put_cf(&handle, key.as_bytes(), v.as_bytes());
+        }
+
+        let snap = db.snapshot();
+        let opt = ReadOptions::default();
+        let mut iter = snap.iter_cf(&handle, opt);
+        iter.seek(SeekKey::Start);
+        let begin = Instant::now();
+        let mut count = 0;
+        while iter.valid().unwrap() {
+            iter.next();
+            count += 1;
+        }
+        println!("count {}", count);
+        let end = Instant::now();
+        let duration = end.saturating_duration_since(begin);
+        println!("{:?}", duration);
+
+        let size = db.get_approximate_sizes_cf(&handle, &[Range::new(b"",b"z")])[0] as f64;
+        println!("{:?}MB", size/8.0/1024.0/1024.0);
+
+        db.flush_cf(&handle, &f);
+
+        let size = db.get_approximate_sizes_cf(&handle, &[Range::new(b"",b"z")])[0] as f64;
+        println!("{:?}MB", size/8.0/1024.0/1024.0);
+        let snap = db.snapshot();
+        let opt = ReadOptions::default();
+        let mut iter = snap.iter_cf(&handle, opt);
+        iter.seek(SeekKey::Start);
+        let begin = Instant::now();
+        count = 0;
+        while iter.valid().unwrap() {
+            iter.next();
+            count += 1;
+        }
+        println!("count {}", count);
+        let end = Instant::now();
+        let duration = end.saturating_duration_since(begin);
+        println!("{:?}", duration);
+
+
+        println!("after loading in block cahce");
+        let snap = db.snapshot();
+        let opt = ReadOptions::default();
+        let mut iter = snap.iter_cf(&handle, opt);
+        iter.seek(SeekKey::Start);
+        let begin = Instant::now();
+        count = 0;
+        while iter.valid().unwrap() {
+            iter.next();
+            count += 1;
+        }
+        println!("count {}", count);
+        let end = Instant::now();
+        let duration = end.saturating_duration_since(begin);
+        println!("{:?}", duration);
+
     }
 
     #[test]
