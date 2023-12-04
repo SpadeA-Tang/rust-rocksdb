@@ -110,6 +110,8 @@ mod table_properties_rc_handles;
 mod titan;
 mod write_batch;
 
+pub use metadata::LiveFiles;
+
 #[cfg(test)]
 fn tempdir_with_prefix(prefix: &str) -> tempfile::TempDir {
     tempfile::Builder::new().prefix(prefix).tempdir().expect("")
